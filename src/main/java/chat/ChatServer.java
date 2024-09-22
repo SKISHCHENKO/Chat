@@ -6,123 +6,144 @@ import java.net.Socket;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ChatServer {
     private static final String FILE_SETTINGS = "src/main/resources/settings.txt";
     private static final String USERS_FILE = "src/main/resources/users.txt";
     private static final String FILE_LOG = "src/main/resources/log.txt";
+    private static final String FILE_LOG_ERROR = "src/main/resources/error_log.txt";
     private static final Map<String, String> users = new ConcurrentHashMap<>();
     private static final Map<String, PrintWriter> clientWriters = new ConcurrentHashMap<>();
-    private static  int PORT;
-    static StringBuilder log = new StringBuilder();
+    private static int PORT;
+
+    // создан для тестов
+    public static Map<String, String> getUsers() {
+        return users;
+    }
+    // создан для тестов
+    public static Map<String, PrintWriter> getClientWriters() {
+        return clientWriters;
+    }
 
     public static void main(String[] args) {
-        loadSettings();
-        loadUsersFromFile();
+        loadSettings(FILE_SETTINGS);
+        loadUsersFromFile(USERS_FILE);
 
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            System.out.println("Chat server started...");
+            System.out.println("Сервер Сетевой чат запущен...");
+            log("Сервер Сетевой чат запущен...");
             while (true) {
                 new ClientHandler(serverSocket.accept()).start();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            logError("Ошибка запуска Сервера: " + e.getMessage());
         }
     }
-
-    private static class ClientHandler extends Thread {
+    // класс обработки соединений в потоках
+    public static class ClientHandler extends Thread {
         private final Socket socket;
-        private PrintWriter out;
+        private String clientName = "Гость";
         private BufferedReader in;
-        private String clientName;
+        private PrintWriter out;
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
         }
-
         public void run() {
             try {
-                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                out = new PrintWriter(socket.getOutputStream(), true);
-
-                // Запрашиваем у пользователя его имя
+                this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                this.out = new PrintWriter(socket.getOutputStream(), true);
+                run(in, out);
+            } catch (IOException e) {
+                logError("Ошибка открытия потоков: " + e.getMessage());
+            } finally {
+                clientWriters.remove(clientName);
+                if(!clientName.equals("error")) {
+                    broadcastMessage("Server: " + clientName + " покинул(a) чат");
+                }
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    logError("Ошибка закрытия сокета: " + e.getMessage());
+                }
+            }
+        }
+        // Основной поток сервера  Аргументы добавил для Junit тестов
+        public void run(BufferedReader in, PrintWriter out) throws IOException {
                 out.println("Добро пожаловать в чат! Введите '1' для входа или '2' для регистрации:");
-                out.println("Введите '3' выхода и закрытия соединения:");
+                out.println("Введите '3' для выхода без регистрации:");
                 String choice = in.readLine();
+                clientWriters.put("Гость", out);
 
-                switch(choice){
+                switch (choice) {
                     case "1":
-                       clientName = handleLogin(in, out,this);
+                        do {
+                            clientName = handleLogin(in, out);
+                        } while (clientName.equals("Гость"));
                         break;
                     case "2":
+                        do {
                         clientName = handleRegistration(in, out);
+                        } while (clientName.equals("Гость"));
                         break;
                     case "3":
                         out.println("Отключение...");
                         ChatServer.disconnectClient(this);
+                        return;
                     default:
                         out.println("Неверный выбор.");
                         ChatServer.disconnectClient(this);
+                        return;
                 }
-
-                System.out.println("Подключён новый клиент: " + clientName);
-
+                if (clientName.equalsIgnoreCase("error") || clientName.equals("exit") ) {
+                    clientName = "Гость";
+                    ChatServer.disconnectClient(this);
+                    return;
+                }
+                System.out.println("Подключён новый посетитель: " + clientName);
                 broadcastMessage("Server: " + clientName + " присоединился к чату");
+                clientWriters.remove("Гость");
                 clientWriters.put(clientName, out);
-                log("Server: " + clientName + " присоединился к чату");
 
                 String message;
                 while ((message = in.readLine()) != null) {
-                    if (message.equalsIgnoreCase("exit")) {
-                        out.println("Отключение...");
-                        break; // Остановка цикла при получении команды "exit"
-                    }
-                    System.out.println("Получено сообщение: " + message + " от " + clientName);
+                    System.out.println("Получено сообщение: " + clientName + " : " + message);
                     broadcastMessage(clientName + ": " + message);
-                    log(clientName + ": " + message);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                clientWriters.remove(clientName);
-                broadcastMessage("Server: " + clientName + " покинул чат");
-                try {
-                    socket.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
 
+                    if (message.equalsIgnoreCase("exit")) {
+                        ChatServer.disconnectClient(this);
+                        return;
+                    }
+                }
+        }
         // Метод для рассылки сообщений всем клиентам
         private void broadcastMessage(String message) {
             for (PrintWriter writer : clientWriters.values()) {
                 writer.println(message);
             }
+            log(message); // логирование
         }
     }
     // Загрузка настроек из файла
-    private static void loadSettings() {
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_SETTINGS))) {
+    private static void loadSettings(String filePath) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split(":");
                 if (parts.length == 2) {
                     PORT = Integer.parseInt(parts[1]);
-                }
-                else {
+                } else {
                     System.out.println("Данные в файле повреждены");
                 }
             }
         } catch (IOException e) {
-            System.out.println("Ошибка при загрузке настроек из файла: " + e.getMessage());
+            logError("Ошибка при загрузке настроек из файла: " + e.getMessage());
         }
     }
     // Загрузка пользователей из файла
-    private static void loadUsersFromFile() {
-        try (BufferedReader reader = new BufferedReader(new FileReader(USERS_FILE))) {
+    private static void loadUsersFromFile(String filePat) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePat))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split(":");
@@ -131,7 +152,7 @@ public class ChatServer {
                 }
             }
         } catch (IOException e) {
-            System.out.println("Ошибка при загрузке пользователей из файла: " + e.getMessage());
+            logError("Ошибка при загрузке пользователей из файла: " + e.getMessage());
         }
     }
     // Сохранение нового пользователя в файл
@@ -140,34 +161,44 @@ public class ChatServer {
             writer.write(login + ":" + password);
             writer.newLine();
         } catch (IOException e) {
-            System.out.println("Ошибка при сохранении пользователя: " + e.getMessage());
+            logError("Ошибка при сохранении пользователя: " + e.getMessage());
         }
     }
-    private static String handleLogin(BufferedReader in, PrintWriter out, ClientHandler clientHandler) throws IOException {
+    //Метод для обработки авторизации
+    private static String handleLogin(BufferedReader in, PrintWriter out) throws IOException {
+
         out.println("Введите логин:");
+        System.out.println("Ожидается ввод логина от клиента...");
         String login = in.readLine();
 
+        if (login.equals("exit")) {
+            return "exit";
+        }
+        if (!users.containsKey(login)) {
+            out.println("Такого логина не существует. Попробуйте другой либо наберите exit для выхода:");
+            return "Гость";
+        }
         out.println("Введите пароль:");
+        System.out.println("Ожидается ввод пароля от клиента...");
         String password = in.readLine();
-
         if (authenticate(login, password)) {
             out.println("Вход успешен! Добро пожаловать, " + login);
-            return login;  // Возвращаем логин, если аутентификация успешна
+            return login;
         } else {
             out.println("Неверный логин или пароль.");
-            out.println("Отсоединение...");
-            ChatServer.disconnectClient(clientHandler);
-            return null;  // Возвращаем null при неудачной попытке входа
+            return "error";
         }
     }
 
     // Метод для обработки регистрации
     private static String handleRegistration(BufferedReader in, PrintWriter out) throws IOException {
+        System.out.println("Регистрация нового клиента...");
         out.println("Придумайте логин:");
         String login = in.readLine();
 
         if (users.containsKey(login)) {
             out.println("Логин уже существует. Попробуйте другой.");
+            return "Гость";
         }
 
         out.println("Придумайте пароль:");
@@ -175,37 +206,58 @@ public class ChatServer {
         users.put(login, password);
         saveUserToFile(login, password);
         out.println("Регистрация успешна! Теперь вы можете войти.");
-
         return login;
     }
 
-    // Аутентификация пользователя
     private static boolean authenticate(String login, String password) {
         return users.containsKey(login) && users.get(login).equals(password);
     }
+    // Метод для отключения клиента со стороны сервера
     public static void disconnectClient(ClientHandler clientHandler) {
         try {
-            if (clientHandler != null && clientHandler.clientName != null) {
+            if (clientHandler != null && clientHandler.clientName != null && !clientHandler.clientName.equals("Гость")) {
                 clientWriters.remove(clientHandler.clientName); // Удаляем по имени клиента
             }
-            clientHandler.socket.close(); // Закрываем сокет
-            System.out.println("Клиент " + clientHandler.clientName + " отключен.");
+            if (clientHandler.socket != null && !clientHandler.socket.isClosed()) {
+                clientHandler.socket.close();
+            }
+            String msg;
+            if (clientHandler.clientName.equals("Гость")){
+                msg = "Неавторизованный Гость отключен!";
+                System.out.println(msg);
+            } else {
+                msg = "Клиент " + clientHandler.clientName + " отключен!";
+                System.out.println(msg);
+            }
+            log(msg);
         } catch (IOException e) {
-            e.printStackTrace();
+            logError("Ошибка при отключении клиента: " + e.getMessage());
         }
     }
-    public static void logToFile(StringBuilder msg) {
-        try (FileWriter logWriter = new FileWriter(FILE_LOG, true)) {
-            logWriter.write(msg.toString());
-        } catch (IOException e) {
-            System.err.println("Ошибка при записи лога: " + e.getMessage());
-        }
-    }
+    //Логирование
     public static void log(String msg) {
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
         LocalDateTime now = LocalDateTime.now();
-        log.append("[").append(dtf.format(now)).append("] <").append(msg).append(">").append("\n");
-        logToFile(log);
+        String logMessage = "[" + dtf.format(now) + "] <" + msg + ">\n";
+        logToFile(logMessage);
     }
-
+    // Запись лога в файл
+    public static void logToFile(String msg) {
+        try (FileWriter logWriter = new FileWriter(FILE_LOG, true)) {
+            logWriter.write(msg);
+        } catch (IOException e) {
+            logError("Ошибка при записи лога: " + e.getMessage());
+        }
+    }
+    // Логирование ошибок в отдельный файл
+    public static void logError(String errorMsg) {
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
+        LocalDateTime now = LocalDateTime.now();
+        String errorLogMessage = "[" + dtf.format(now) + "] <ERROR> " + errorMsg + "\n";
+        try (FileWriter errorWriter = new FileWriter(FILE_LOG_ERROR, true)) {
+            errorWriter.write(errorLogMessage);
+        } catch (IOException e) {
+            System.err.println("Ошибка при записи ошибки в лог: " + e.getMessage());
+        }
+    }
 }
