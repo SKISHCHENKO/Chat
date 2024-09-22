@@ -2,11 +2,4 @@ Serg:12345
 Alena:qwerty
 Ketan:12345
 Nasty:qwerty
-newuser:newpassword123
-newuser:newpassword123
-newuser:newpassword123
-newuser:newpassword123
-newuser:newpassword123
-Any:qwerty
-newuser:newpassword123
-newuser:newpassword123
+
