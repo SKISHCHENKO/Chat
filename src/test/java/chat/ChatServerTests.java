@@ -5,16 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.io.BufferedReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -81,29 +74,5 @@ public class ChatServerTests {
         verify(mockWriter).println("Регистрация успешна! Теперь вы можете войти.");
         verify(mockWriter).println("Server: newuser присоединился к чату");
         verify(mockWriter).println("newuser: exit");
-    }
-
-    @Test
-    public void testLog() throws IOException {
-        String message = "Test message";
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-        LocalDateTime now = LocalDateTime.now();
-        String expectedLogMessage = "[" + dtf.format(now) + "] <" + message + ">\n";
-
-        ChatServer.log(message);
-
-        Path logFilePath = Paths.get(FILE_LOG);
-        String fileContent = Files.readString(logFilePath);
-
-        assertTrue(fileContent.contains(expectedLogMessage));
-    }
-
-    @Test
-    public void testLogToFileWithException() throws IOException {
-
-        FileWriter mockWriter = Mockito.mock(FileWriter.class);
-        doThrow(new IOException("Test exception")).when(mockWriter).write(anyString());
-
-        assertDoesNotThrow(() -> ChatServer.logToFile("Error message"));
     }
 }
