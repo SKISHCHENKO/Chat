@@ -31,12 +31,12 @@ public class ChatServer {
 
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             System.out.println("Сервер Сетевой чат запущен...");
-            logger.log("Сервер Сетевой чат запущен...");
+            logger.log("Сервер Сетевой чат запущен...", Log.SERVER);
             while (true) {
                 new ClientHandler(serverSocket.accept()).start();
             }
         } catch (IOException e) {
-            logger.logError("Ошибка запуска Сервера: " + e.getMessage());
+            logger.logError("Ошибка запуска Сервера: " + e.getMessage(), Log.SERVER);
         }
     }
 
@@ -57,7 +57,7 @@ public class ChatServer {
                 this.out = new PrintWriter(socket.getOutputStream(), true);
                 run(in, out);
             } catch (IOException e) {
-                logger.logError("Ошибка открытия потоков: " + e.getMessage());
+                logger.logError("Ошибка открытия потоков: " + e.getMessage(), Log.SERVER);
             } finally {
                 clientWriters.remove(clientName);
                 if (!clientName.equals("error")) {
@@ -66,7 +66,7 @@ public class ChatServer {
                 try {
                     socket.close();
                 } catch (IOException e) {
-                    logger.logError("Ошибка закрытия сокета: " + e.getMessage());
+                    logger.logError("Ошибка закрытия сокета: " + e.getMessage(), Log.SERVER);
                 }
             }
         }
@@ -125,7 +125,7 @@ public class ChatServer {
             for (PrintWriter writer : clientWriters.values()) {
                 writer.println(message);
             }
-            logger.log(message); // логирование
+            logger.log(message, Log.SERVER); // логирование
         }
     }
 
@@ -142,7 +142,7 @@ public class ChatServer {
                 }
             }
         } catch (IOException e) {
-            logger.logError("Ошибка при загрузке настроек из файла: " + e.getMessage());
+            logger.logError("Ошибка при загрузке настроек из файла: " + e.getMessage(), Log.SERVER);
         }
     }
 
@@ -157,7 +157,7 @@ public class ChatServer {
                 }
             }
         } catch (IOException e) {
-            logger.logError("Ошибка при загрузке пользователей из файла: " + e.getMessage());
+            logger.logError("Ошибка при загрузке пользователей из файла: " + e.getMessage(), Log.SERVER);
         }
     }
 
@@ -167,7 +167,7 @@ public class ChatServer {
             writer.write(login + ":" + password);
             writer.newLine();
         } catch (IOException e) {
-            logger.logError("Ошибка при сохранении пользователя: " + e.getMessage());
+            logger.logError("Ошибка при сохранении пользователя: " + e.getMessage(), Log.SERVER);
         }
     }
 
@@ -237,9 +237,9 @@ public class ChatServer {
                 msg = "Клиент " + clientHandler.clientName + " отключен!";
                 System.out.println(msg);
             }
-            logger.log(msg);
+            logger.log(msg, Log.SERVER);
         } catch (IOException e) {
-            logger.logError("Ошибка при отключении клиента: " + e.getMessage());
+            logger.logError("Ошибка при отключении клиента: " + e.getMessage(), Log.SERVER);
         }
     }
 }

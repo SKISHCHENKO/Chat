@@ -11,9 +11,11 @@ public class Log {
     private final String logFilePathError;
     private final Object lock = new Object();
     private final Object lockError = new Object();
+    public final static String SERVER = "Server";
+    public final static String CLIENT = "Client";
 
-    private static final String FILE_LOG = "src/main/resources/log.txt";
-    private static final String FILE_LOG_ERROR = "src/main/resources/error_log.txt";
+    private static final String FILE_LOG = "src/main/resources/file.log";
+    private static final String FILE_LOG_ERROR = "src/main/resources/error.log";
 
     private static Log INSTANCE = null;
 
@@ -35,10 +37,10 @@ public class Log {
     }
 
     //Логирование
-    public void log(String msg) {
+    public void log(String msg, String type) {
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
         LocalDateTime now = LocalDateTime.now();
-        String logMessage = "[" + dtf.format(now) + "] <" + msg + ">";
+        String logMessage = "[" + dtf.format(now) + "] <" + type + ": " + msg + ">";
         logToFile(logMessage);
     }
 
@@ -48,16 +50,16 @@ public class Log {
             try (PrintWriter out = new PrintWriter(new FileWriter(logFilePath, true))) {
                 out.println(msg);
             } catch (IOException e) {
-                logError("Ошибка при записи лога: " + e.getMessage());
+                logError("Ошибка при записи лога: " + e.getMessage(), CLIENT);
             }
         }
     }
 
     // Логирование ошибок в отдельный файл
-    public void logError(String errorMsg) {
+    public void logError(String errorMsg, String type) {
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
         LocalDateTime now = LocalDateTime.now();
-        String errorLogMessage = "[" + dtf.format(now) + "] <ERROR> " + errorMsg + "\n";
+        String errorLogMessage = "[" + dtf.format(now) + "] <ERROR> " + type + ": " + errorMsg + "\n";
         synchronized (lockError) { // Синхронизация для обеспечения потокобезопасности
             try (FileWriter errorWriter = new FileWriter(logFilePathError, true)) {
                 errorWriter.write(errorLogMessage);

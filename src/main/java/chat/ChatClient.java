@@ -9,6 +9,7 @@ public class ChatClient {
     private static String SERVER_ADDRESS;
     private static int PORT;
     private static boolean isRunning = true;  // Флаг для управления завершением работы
+    public static Log logger = Log.getInstance();
 
     public static void main(String[] args) {
         loadSettings(FILE_SETTINGS);
@@ -32,6 +33,7 @@ public class ChatClient {
                     String message;
                     while (isRunning && (message = in.readLine()) != null) {
                         System.out.println(message);
+                        logger.log(message, Log.CLIENT);
                         if (message.equals("Отключение...")) {
                             isRunning = false;  // Устанавливаем флаг, чтобы завершить другие потоки
                             break;
@@ -39,7 +41,9 @@ public class ChatClient {
                     }
                 } catch (IOException e) {
                     if (isRunning) {
-                        System.out.println("Соединение с сервером прервано.");
+                        String msg = "Соединение с сервером прервано: ";
+                        System.out.println(msg);
+                        logger.logError(msg + e.getMessage(), Log.CLIENT);
                     }
                 }
             });
@@ -59,10 +63,13 @@ public class ChatClient {
                         }
                         out.println(message);
                         System.out.println(login + ": " + message);
+                        logger.log(message, Log.CLIENT);
                     }
                 } catch (Exception e) {
                     if (isRunning) {
-                        System.out.println("Ошибка при отправке сообщения.");
+                        String msg = "Ошибка при отправке сообщения: ";
+                        System.out.println(msg);
+                        logger.logError(msg + e.getMessage(), Log.CLIENT);
                     }
                 } finally {
                     closeConnection(out, in, socket);
@@ -74,7 +81,9 @@ public class ChatClient {
             incomingMessages.join();
 
         } catch (IOException | InterruptedException e) {
-            System.out.println("Ошибка подключения к серверу: " + e.getMessage());
+            String msg = "Ошибка подключения к серверу: ";
+            System.out.println(msg);
+            logger.logError(msg + e.getMessage(), Log.CLIENT);
         }
     }
 
@@ -155,7 +164,9 @@ public class ChatClient {
                 }
             }
         } catch (IOException e) {
-            System.out.println("Ошибка при загрузке настроек из файла: " + e.getMessage());
+            String msg = "Ошибка при загрузке настроек из файла: ";
+            System.out.println(msg);
+            logger.logError(msg + e.getMessage(), Log.CLIENT);
         }
     }
 
@@ -167,7 +178,9 @@ public class ChatClient {
             if (socket != null && !socket.isClosed()) socket.close();
             System.out.println("Отключение...");
         } catch (IOException e) {
-            System.out.println("Ошибка при закрытии соединения: " + e.getMessage());
+            String msg = "Ошибка при закрытии соединения: ";
+            System.out.println(msg);
+            logger.logError(msg + e.getMessage(), Log.CLIENT);
         }
         System.exit(0);
     }

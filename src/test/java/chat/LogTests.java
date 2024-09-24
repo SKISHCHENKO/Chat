@@ -17,20 +17,20 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 
 public class LogTests {
-    private static final String FILE_LOG = "src/main/resources/log.txt";
+    private static final String FILE_LOG= "src/main/resources/file.log";
+
     @Test
     public void testLog() throws IOException {
         String message = "Test message";
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-        LocalDateTime now = LocalDateTime.now();
-        String expectedLogMessage = "[" + dtf.format(now) + "] <" + message + ">\n";
+
+        String expectedLogMessage = "<" + Log.SERVER + ": " + message + ">";
+        System.out.println(expectedLogMessage);
 
         Log logger = Log.getInstance();
-        logger.log(message);
+        logger.log(message, Log.SERVER);
 
         Path logFilePath = Paths.get(FILE_LOG);
         String fileContent = Files.readString(logFilePath);
-
         assertTrue(fileContent.contains(expectedLogMessage));
     }
 
