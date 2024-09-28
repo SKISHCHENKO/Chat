@@ -3,6 +3,7 @@ package chat;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -53,16 +54,36 @@ public class ChatServer {
 
         public void run() {
             try {
+                // Попытка открыть потоки
                 this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 this.out = new PrintWriter(socket.getOutputStream(), true);
-                run(in, out);
             } catch (IOException e) {
+                // Обработка ошибки при открытии потоков
                 logger.logError("Ошибка открытия потоков: " + e.getMessage(), Log.SERVER);
-            } finally {
-                clientWriters.remove(clientName);
-                if (!clientName.equals("error")) {
-                    broadcastMessage("Server: " + clientName + " покинул(a) чат");
+                System.out.println("Ошибка открытия потоков!");
+                return;  // Выход из метода, так как не удается работать без потоков
+            }
+            try {
+                // Основной цикл работы с клиентом
+                run(in, out); // Метод для обработки общения с клиентом
+            } catch (IOException e) {
+                // Проверяем, разорвал ли клиент соединение
+                if (e instanceof SocketException) {
+                    System.out.println("Клиент " + clientName + " разорвал соединение.");
+                    logger.logError("Клиент " + clientName + " разорвал соединение. " + e.getMessage(), Log.SERVER);
+                } else {
+                    logger.logError("Ошибка во время работы с клиентом: " + e.getMessage(), Log.SERVER);
+                    System.out.println("Ошибка работы с клиентом!");
                 }
+            } finally {
+                // Выполняем очистку и закрытие ресурсов
+                clientWriters.remove(clientName);
+
+                // Если клиент не разорвал соединение на этапе открытия потоков (или не возникла другая ошибка)
+                if (!clientName.equals("error")) {
+                    broadcastMessage(clientName + " покинул(a) чат");
+                }
+
                 try {
                     socket.close();
                 } catch (IOException e) {
@@ -104,7 +125,7 @@ public class ChatServer {
                 return;
             }
             System.out.println("Подключён новый посетитель: " + clientName);
-            broadcastMessage("Server: " + clientName + " присоединился к чату");
+            broadcastMessage(clientName + " присоединился к чату");
             clientWriters.remove("Гость");
             clientWriters.put(clientName, out);
 

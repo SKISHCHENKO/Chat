@@ -13,9 +13,6 @@ import static org.mockito.Mockito.*;
 
 
 public class ChatServerTests {
-    private static final String FILE_SETTINGS = "src/main/resources/settings.txt";
-    private static final String USERS_FILE = "src/main/resources/users.txt";
-    private static final String FILE_LOG = "src/main/resources/log.txt";
 
     private Socket mockSocket;
     private BufferedReader mockReader;
