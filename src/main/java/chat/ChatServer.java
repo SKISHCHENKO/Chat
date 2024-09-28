@@ -58,19 +58,18 @@ public class ChatServer {
                 this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 this.out = new PrintWriter(socket.getOutputStream(), true);
             } catch (IOException e) {
-                // Обработка ошибки при открытии потоков
                 logger.logError("Ошибка открытия потоков: " + e.getMessage(), Log.SERVER);
                 System.out.println("Ошибка открытия потоков!");
                 return;  // Выход из метода, так как не удается работать без потоков
             }
             try {
-                // Основной цикл работы с клиентом
                 run(in, out); // Метод для обработки общения с клиентом
             } catch (IOException e) {
                 // Проверяем, разорвал ли клиент соединение
                 if (e instanceof SocketException) {
-                    System.out.println("Клиент " + clientName + " разорвал соединение.");
-                    logger.logError("Клиент " + clientName + " разорвал соединение. " + e.getMessage(), Log.SERVER);
+                    System.out.println("Клиент " + clientName + " разорвал(а) соединение.");
+                    logger.logError("Клиент " + clientName + " разорвал(а) соединение. " + e.getMessage(), Log.SERVER);
+                    broadcastMessage(clientName + " самостоятельно разорвал(а) соединение.");
                 } else {
                     logger.logError("Ошибка во время работы с клиентом: " + e.getMessage(), Log.SERVER);
                     System.out.println("Ошибка работы с клиентом!");
@@ -125,7 +124,7 @@ public class ChatServer {
                 return;
             }
             System.out.println("Подключён новый посетитель: " + clientName);
-            broadcastMessage(clientName + " присоединился к чату");
+            broadcastMessage(clientName + " присоединяется к чату");
             clientWriters.remove("Гость");
             clientWriters.put(clientName, out);
 
