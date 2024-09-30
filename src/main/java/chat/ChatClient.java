@@ -33,7 +33,7 @@ public class ChatClient {
                     String message;
                     while (isRunning && (message = in.readLine()) != null) {
                         System.out.println(message);
-                        logger.log(message, Log.CLIENT);
+                            logger.log(message, Log.CLIENT);
                         if (message.equals("Отключение...")) {
                             isRunning = false;  // Устанавливаем флаг, чтобы завершить другие потоки
                             break;
@@ -62,8 +62,7 @@ public class ChatClient {
                             break;
                         }
                         out.println(message);
-                        System.out.println(login + ": " + message);
-                        logger.log(message, Log.CLIENT);
+                      //  logger.log(message, Log.CLIENT);
                     }
                 } catch (Exception e) {
                     if (isRunning) {

@@ -14,14 +14,13 @@ public class ChatServer {
     private static final Map<String, PrintWriter> clientWriters = new ConcurrentHashMap<>();
     private static int PORT;
 
-    public static Log logger = Log.getInstance(); //Логгер
+    public static Log logger = Log.getInstance(); // Логгер
 
-    // создан для тестов
+    // методы для тестов
     public static Map<String, String> getUsers() {
         return users;
     }
 
-    // создан для тестов
     public static Map<String, PrintWriter> getClientWriters() {
         return clientWriters;
     }
@@ -53,46 +52,20 @@ public class ChatServer {
         }
 
         public void run() {
+            logger.log("Подключен новый клиент: " + socket.getRemoteSocketAddress(), Log.SERVER);
             try {
-                // Попытка открыть потоки
                 this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 this.out = new PrintWriter(socket.getOutputStream(), true);
+                handleClientConnection();
             } catch (IOException e) {
-                logger.logError("Ошибка открытия потоков: " + e.getMessage(), Log.SERVER);
-                System.out.println("Ошибка открытия потоков!");
-                return;  // Выход из метода, так как не удается работать без потоков
-            }
-            try {
-                run(in, out); // Метод для обработки общения с клиентом
-            } catch (IOException e) {
-                // Проверяем, разорвал ли клиент соединение
-                if (e instanceof SocketException) {
-                    System.out.println("Клиент " + clientName + " разорвал(а) соединение.");
-                    logger.logError("Клиент " + clientName + " разорвал(а) соединение. " + e.getMessage(), Log.SERVER);
-                    broadcastMessage(clientName + " самостоятельно разорвал(а) соединение.");
-                } else {
-                    logger.logError("Ошибка во время работы с клиентом: " + e.getMessage(), Log.SERVER);
-                    System.out.println("Ошибка работы с клиентом!");
-                }
+                handleSocketException(e);
             } finally {
-                // Выполняем очистку и закрытие ресурсов
-                clientWriters.remove(clientName);
-
-                // Если клиент не разорвал соединение на этапе открытия потоков (или не возникла другая ошибка)
-                if (!clientName.equals("error")) {
-                    broadcastMessage(clientName + " покинул(a) чат");
-                }
-
-                try {
-                    socket.close();
-                } catch (IOException e) {
-                    logger.logError("Ошибка закрытия сокета: " + e.getMessage(), Log.SERVER);
-                }
+                cleanupResources();
+                logger.log("Соединение с клиентом " + clientName + " закрыто.", Log.SERVER);
             }
         }
 
-        // Основной поток сервера  Аргументы добавил для Junit тестов
-        public void run(BufferedReader in, PrintWriter out) throws IOException {
+        private void handleClientConnection() throws IOException {
             out.println("Добро пожаловать в чат! Введите '1' для входа или '2' для регистрации:");
             out.println("Введите '3' для выхода без регистрации:");
             String choice = in.readLine();
@@ -100,52 +73,68 @@ public class ChatServer {
 
             switch (choice) {
                 case "1":
-                    do {
-                        clientName = handleLogin(in, out);
-                    } while (clientName.equals("Гость"));
+                    clientName = handleLogin(in, out);
                     break;
                 case "2":
-                    do {
-                        clientName = handleRegistration(in, out);
-                    } while (clientName.equals("Гость"));
+                    clientName = handleRegistration(in, out);
                     break;
                 case "3":
-                    out.println("Отключение...");
-                    ChatServer.disconnectClient(this);
+                    disconnectClient(this);
                     return;
                 default:
                     out.println("Неверный выбор.");
-                    ChatServer.disconnectClient(this);
+                    disconnectClient(this);
                     return;
             }
-            if (clientName.equalsIgnoreCase("error") || clientName.equals("exit")) {
-                clientName = "Гость";
-                ChatServer.disconnectClient(this);
+            clientWriters.remove("Гость");
+
+            if (clientName.equals("error") || clientName.equals("exit")) {
+                disconnectClient(this);
                 return;
             }
-            System.out.println("Подключён новый посетитель: " + clientName);
+
             broadcastMessage(clientName + " присоединяется к чату");
-            clientWriters.remove("Гость");
             clientWriters.put(clientName, out);
 
             String message;
             while ((message = in.readLine()) != null) {
-                System.out.println("Получено сообщение: " + clientName + " : " + message);
-                broadcastMessage(clientName + ": " + message);
-
                 if (message.equalsIgnoreCase("exit")) {
-                    ChatServer.disconnectClient(this);
+                    disconnectClient(this);
                     return;
                 }
+                broadcastMessage(clientName + ": " + message);
             }
         }
 
-        // Метод для рассылки сообщений всем клиентам
+        // Обработка ошибок сокета
+        private void handleSocketException(IOException e) {
+            if (e instanceof SocketException) {
+                System.out.println("Клиент " + clientName + " разорвал соединение.");
+                broadcastMessage(clientName + " разорвал соединение.");
+            } else {
+                logger.logError("Ошибка во время работы с клиентом: " + e.getMessage(), Log.SERVER);
+            }
+        }
+
+        // Очистка ресурсов
+        private void cleanupResources() {
+            try {
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
+                clientWriters.remove(clientName);
+                broadcastMessage(clientName + " покинул чат.");
+            } catch (IOException e) {
+                logger.logError("Ошибка закрытия сокета: " + e.getMessage(), Log.SERVER);
+            }
+        }
+
+        // Рассылка сообщений всем клиентам
         private void broadcastMessage(String message) {
             for (PrintWriter writer : clientWriters.values()) {
                 writer.println(message);
             }
-            logger.log(message, Log.SERVER); // логирование
+            logger.log(message, Log.SERVER);
         }
     }
 
@@ -156,28 +145,26 @@ public class ChatServer {
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split(":");
                 if (parts.length == 2) {
-                    PORT = Integer.parseInt(parts[1]);
-                } else {
-                    System.out.println("Данные в файле повреждены");
+                    PORT = Integer.parseInt(parts[1].trim());
                 }
             }
-        } catch (IOException e) {
-            logger.logError("Ошибка при загрузке настроек из файла: " + e.getMessage(), Log.SERVER);
+        } catch (IOException | NumberFormatException e) {
+            logger.logError("Ошибка при загрузке настроек: " + e.getMessage(), Log.SERVER);
         }
     }
 
     // Загрузка пользователей из файла
-    private static void loadUsersFromFile(String filePat) {
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePat))) {
+    private static void loadUsersFromFile(String filePath) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split(":");
                 if (parts.length == 2) {
-                    users.put(parts[0], parts[1]);
+                    users.put(parts[0].trim(), parts[1].trim());
                 }
             }
         } catch (IOException e) {
-            logger.logError("Ошибка при загрузке пользователей из файла: " + e.getMessage(), Log.SERVER);
+            logger.logError("Ошибка при загрузке пользователей: " + e.getMessage(), Log.SERVER);
         }
     }
 
@@ -191,22 +178,18 @@ public class ChatServer {
         }
     }
 
-    //Метод для обработки авторизации
+    // Авторизация клиента
     private static String handleLogin(BufferedReader in, PrintWriter out) throws IOException {
-
         out.println("Введите логин:");
-        System.out.println("Ожидается ввод логина от клиента...");
         String login = in.readLine();
-
         if (login.equals("exit")) {
             return "exit";
         }
         if (!users.containsKey(login)) {
-            out.println("Такого логина не существует. Попробуйте другой либо наберите exit для выхода:");
+            out.println("Логин не существует. Попробуйте снова или введите 'exit' для выхода.");
             return "Гость";
         }
         out.println("Введите пароль:");
-        System.out.println("Ожидается ввод пароля от клиента...");
         String password = in.readLine();
         if (authenticate(login, password)) {
             out.println("Вход успешен! Добро пожаловать, " + login);
@@ -217,47 +200,37 @@ public class ChatServer {
         }
     }
 
-    // Метод для обработки регистрации
+    // Регистрация клиента
     private static String handleRegistration(BufferedReader in, PrintWriter out) throws IOException {
-        System.out.println("Регистрация нового клиента...");
-        out.println("Придумайте логин:");
+        out.println("Введите логин:");
         String login = in.readLine();
-
         if (users.containsKey(login)) {
             out.println("Логин уже существует. Попробуйте другой.");
             return "Гость";
         }
-
-        out.println("Придумайте пароль:");
+        out.println("Введите пароль:");
         String password = in.readLine();
         users.put(login, password);
         saveUserToFile(login, password);
-        out.println("Регистрация успешна! Теперь вы можете войти.");
+        out.println("Регистрация успешна!");
         return login;
     }
 
+    // Аутентификация клиента
     private static boolean authenticate(String login, String password) {
         return users.containsKey(login) && users.get(login).equals(password);
     }
 
-    // Метод для отключения клиента со стороны сервера
+    // Отключение клиента
     public static void disconnectClient(ClientHandler clientHandler) {
         try {
             if (clientHandler != null && clientHandler.clientName != null && !clientHandler.clientName.equals("Гость")) {
-                clientWriters.remove(clientHandler.clientName); // Удаляем по имени клиента
+                clientWriters.remove(clientHandler.clientName);
             }
             if (clientHandler.socket != null && !clientHandler.socket.isClosed()) {
                 clientHandler.socket.close();
             }
-            String msg;
-            if (clientHandler.clientName.equals("Гость")) {
-                msg = "Неавторизованный Гость отключен!";
-                System.out.println(msg);
-            } else {
-                msg = "Клиент " + clientHandler.clientName + " отключен!";
-                System.out.println(msg);
-            }
-            logger.log(msg, Log.SERVER);
+            logger.log(clientHandler.clientName + " отключен!", Log.SERVER);
         } catch (IOException e) {
             logger.logError("Ошибка при отключении клиента: " + e.getMessage(), Log.SERVER);
         }
