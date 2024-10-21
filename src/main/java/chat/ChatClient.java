@@ -27,53 +27,11 @@ public class ChatClient {
                 System.exit(0);
             }
 
-            // Поток для чтения сообщений от сервера
-            Thread incomingMessages = new Thread(() -> {
-                try {
-                    String message;
-                    while (isRunning && (message = in.readLine()) != null) {
-                        System.out.println(message);
-                            logger.log(message, Log.CLIENT);
-                        if (message.equals("Отключение...")) {
-                            isRunning = false;  // Устанавливаем флаг, чтобы завершить другие потоки
-                            break;
-                        }
-                    }
-                } catch (IOException e) {
-                    if (isRunning) {
-                        String msg = "Соединение с сервером прервано: ";
-                        System.out.println(msg);
-                        logger.logError(msg + e.getMessage(), Log.CLIENT);
-                    }
-                }
-            });
+
+            Thread incomingMessages = createIncomingMessagesThread(in);
             incomingMessages.start();
 
-            // Поток для отправки сообщений на сервер
-            Thread outgoingMessages = new Thread(() -> {
-                try {
-                    String message;
-                    while (isRunning) {
-                        message = scanner.nextLine();
-                        if (message.equalsIgnoreCase("exit")) {
-                            out.println(login + " покидает чат.");
-                            out.println("exit");  // Отправляем команду "exit" на сервер
-                            isRunning = false;  // Останавливаем цикл отправки сообщений
-                            break;
-                        }
-                        out.println(message);
-                      //  logger.log(message, Log.CLIENT);
-                    }
-                } catch (Exception e) {
-                    if (isRunning) {
-                        String msg = "Ошибка при отправке сообщения: ";
-                        System.out.println(msg);
-                        logger.logError(msg + e.getMessage(), Log.CLIENT);
-                    }
-                } finally {
-                    closeConnection(out, in, socket);
-                }
-            });
+            Thread outgoingMessages = createOutgoingMessagesThread(out, scanner, login, socket);
             outgoingMessages.start();
 
             outgoingMessages.join();
@@ -85,6 +43,55 @@ public class ChatClient {
             logger.logError(msg + e.getMessage(), Log.CLIENT);
         }
     }
+    private static Thread createOutgoingMessagesThread(PrintWriter out, Scanner scanner, String login, Socket socket) {
+        return new Thread(() -> {
+            try {
+                String message;
+                while (isRunning) {
+                    message = scanner.nextLine();
+                    if (message.equalsIgnoreCase("exit")) {
+                        out.println(login + " покидает чат.");
+                        out.println("exit");  // Отправляем команду "exit" на сервер
+                        isRunning = false;  // Останавливаем цикл отправки сообщений
+                        break;
+                    }
+                    out.println(message);
+                    //  logger.log(message, Log.CLIENT);
+                }
+            } catch (Exception e) {
+                if (isRunning) {
+                    String msg = "Ошибка при отправке сообщения: ";
+                    System.out.println(msg);
+                    logger.logError(msg + e.getMessage(), Log.CLIENT);
+                }
+            } finally {
+                closeConnection(out, null, socket);
+            }
+        });
+    }
+
+    // Новый метод для создания потока incomingMessages
+    private static Thread createIncomingMessagesThread(BufferedReader in) {
+        return new Thread(() -> {
+            try {
+                String message;
+                while (isRunning && (message = in.readLine()) != null) {
+                    System.out.println(message);
+                    logger.log(message, Log.CLIENT);
+                    if (message.equals("Отключение...")) {
+                        isRunning = false;  // Устанавливаем флаг, чтобы завершить другие потоки
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                if (isRunning) {
+                    String msg = "Соединение с сервером прервано: ";
+                    System.out.println(msg);
+                    logger.logError(msg + e.getMessage(), Log.CLIENT);
+                }
+            }
+        });
+    }
 
     private static String handleLoginOrRegistration(BufferedReader in, PrintWriter out, BufferedReader consoleIn, Socket socket) throws IOException {
         System.out.println(in.readLine());
@@ -93,51 +100,14 @@ public class ChatClient {
         out.println(choice);
 
         String login = "";
-        String result;
-        String password;
 
         switch (choice) {
             case "1":
-                do {
-                    System.out.println(in.readLine());
-                    login = consoleIn.readLine(); // Логин
-                    if (login.equals("exit")) {
-                        out.println(login);
-                        closeConnection(out, in, socket);
-                    }
-                    out.println(login);
-                    result = in.readLine();
-                    System.out.println(result);
-                } while (result.contains("Попробуйте другой"));
-                password = consoleIn.readLine(); // Пароль
-                out.println(password);
-
-                result = in.readLine();
-                System.out.println(result);
-                if (!result.contains("успешен")) {
-                    closeConnection(out, in, socket);
-                }
+                login = handleLogin(in, out, consoleIn, socket);
                 break;
-
             case "2":
-                do {
-                    System.out.println(in.readLine());
-                    login = consoleIn.readLine(); // Логин
-                    out.println(login);
-                    result = in.readLine();
-                    System.out.println(result);
-                } while (result.contains("Попробуйте другой"));
-
-                password = consoleIn.readLine();   // Пароль
-                out.println(password);
-
-                result = in.readLine();
-                System.out.println(result);
-                if (!result.contains("успешна")) {
-                    closeConnection(out, in, socket);
-                }
+                login = handleRegistration(in, out, consoleIn, socket);
                 break;
-
             case "3":
                 closeConnection(out, in, socket);
                 break;
@@ -146,6 +116,52 @@ public class ChatClient {
                 closeConnection(out, in, socket);
         }
 
+        return login;
+    }
+
+    private static String handleLogin(BufferedReader in, PrintWriter out, BufferedReader consoleIn, Socket socket) throws IOException {
+        String login;
+        String result;
+        do {
+            System.out.println(in.readLine());
+            login = consoleIn.readLine(); // Логин
+            if (login.equals("exit")) {
+                out.println(login);
+                closeConnection(out, in, socket);
+            }
+            out.println(login);
+            result = in.readLine();
+            System.out.println(result);
+        } while (result.contains("Попробуйте другой"));
+
+        String password = consoleIn.readLine(); // Пароль
+        out.println(password);
+        result = in.readLine();
+        System.out.println(result);
+        if (!result.contains("успешен")) {
+            closeConnection(out, in, socket);
+        }
+        return login;
+    }
+
+    private static String handleRegistration(BufferedReader in, PrintWriter out, BufferedReader consoleIn, Socket socket) throws IOException {
+        String login;
+        String result;
+        do {
+            System.out.println(in.readLine());
+            login = consoleIn.readLine(); // Логин
+            out.println(login);
+            result = in.readLine();
+            System.out.println(result);
+        } while (result.contains("Попробуйте другой"));
+
+        String password = consoleIn.readLine();   // Пароль
+        out.println(password);
+        result = in.readLine();
+        System.out.println(result);
+        if (!result.contains("успешна")) {
+            closeConnection(out, in, socket);
+        }
         return login;
     }
 

@@ -4,3 +4,5 @@ Ketan:12345
 Nasty:qwerty
 
 newuser:newpassword123
+newuser:newpassword123
+newuser:newpassword123

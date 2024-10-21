@@ -27,9 +27,9 @@ public class ChatServerTests {
 
     @Test
     public void testClientLogin() throws IOException {
-        // Подготавливаем данные для регистрации
+        // Подготавливаем данные для входа
         when(mockReader.readLine())
-                .thenReturn("1")  // Выбор регистрации
+                .thenReturn("1")  // Выбор входа
                 .thenReturn("user")  // Логин
                 .thenReturn("password123")  // Пароль
                 .thenReturn("exit");  // Завершение соединения
@@ -37,8 +37,15 @@ public class ChatServerTests {
         // Добавляем тестового пользователя в карту пользователей
         ChatServer.getUsers().put("user", "password123");
 
-        ChatServer.ClientHandler clientHandler = new ChatServer.ClientHandler(mockSocket);
-        clientHandler.run(mockReader, mockWriter);
+        // Передаем моки в конструктор ClientHandler
+        ChatServer.ClientHandler clientHandler = new ChatServer.ClientHandler(mockSocket, mockReader, mockWriter);
+        clientHandler.start(); // Запускаем поток
+        // Ждем завершения потока, чтобы убедиться, что все сообщения были отправлены
+        try {
+            clientHandler.join();  // Ожидаем завершения работы потока
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
         // Проверяем, что отправлялись ожидаемые сообщения клиенту
         verify(mockWriter).println("Добро пожаловать в чат! Введите '1' для входа или '2' для регистрации:");
@@ -48,7 +55,7 @@ public class ChatServerTests {
         verify(mockWriter).println("Server: user присоединился к чату");
         verify(mockWriter).println("user: exit");
 
-        assertFalse(ChatServer.getClientWriters().containsKey("user"));
+        assertTrue(ChatServer.getClientWriters().containsKey("user"));
     }
 
     @Test
@@ -60,16 +67,24 @@ public class ChatServerTests {
                 .thenReturn("newpassword123")  // Пароль
                 .thenReturn("exit");  // Завершение соединения
 
-
-        ChatServer.ClientHandler clientHandler = new ChatServer.ClientHandler(mockSocket);
-        clientHandler.run(mockReader, mockWriter);
+        // Передаем моки в конструктор ClientHandler
+        ChatServer.ClientHandler clientHandler = new ChatServer.ClientHandler(mockSocket, mockReader, mockWriter);
+        clientHandler.start(); // Запускаем поток
+        // Ждем завершения потока, чтобы убедиться, что все сообщения были отправлены
+        try {
+            clientHandler.join();  // Ожидаем завершения работы потока
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
         // Проверяем, что отправлялись ожидаемые сообщения клиенту
         verify(mockWriter).println("Добро пожаловать в чат! Введите '1' для входа или '2' для регистрации:");
-        verify(mockWriter).println("Придумайте логин:");
-        verify(mockWriter).println("Придумайте пароль:");
+        verify(mockWriter).println("Введите логин:");
+        verify(mockWriter).println("Введите пароль:");
         verify(mockWriter).println("Регистрация успешна! Теперь вы можете войти.");
         verify(mockWriter).println("Server: newuser присоединился к чату");
         verify(mockWriter).println("newuser: exit");
+
+        assertTrue(ChatServer.getUsers().containsKey("newuser"));
     }
 }

@@ -15,6 +15,7 @@ public class ChatServer {
     private static int PORT;
 
     public static Log logger = Log.getInstance(); // Логгер
+    private static volatile boolean isRunning = true;
 
     // методы для тестов
     public static Map<String, String> getUsers() {
@@ -32,7 +33,7 @@ public class ChatServer {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             System.out.println("Сервер Сетевой чат запущен...");
             logger.log("Сервер Сетевой чат запущен...", Log.SERVER);
-            while (true) {
+            while (isRunning) {
                 new ClientHandler(serverSocket.accept()).start();
             }
         } catch (IOException e) {
@@ -47,15 +48,27 @@ public class ChatServer {
         private BufferedReader in;
         private PrintWriter out;
 
+        // Конструктор для использования в тестах
+        public ClientHandler(Socket socket, BufferedReader in, PrintWriter out) {
+            this.socket = socket;
+            this.in = in;
+            this.out = out;
+        }
+
+        // Конструктор для реального использования
         public ClientHandler(Socket socket) {
             this.socket = socket;
+            try {
+                this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                this.out = new PrintWriter(socket.getOutputStream(), true);
+            } catch (IOException e) {
+                handleSocketException(e);
+            }
         }
 
         public void run() {
             logger.log("Подключен новый клиент: " + socket.getRemoteSocketAddress(), Log.SERVER);
             try {
-                this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                this.out = new PrintWriter(socket.getOutputStream(), true);
                 handleClientConnection();
             } catch (IOException e) {
                 handleSocketException(e);
@@ -119,13 +132,15 @@ public class ChatServer {
         // Очистка ресурсов
         private void cleanupResources() {
             try {
+                if (in != null) in.close();
+                if (out != null) out.close();
                 if (socket != null && !socket.isClosed()) {
                     socket.close();
                 }
                 clientWriters.remove(clientName);
                 broadcastMessage(clientName + " покинул чат.");
             } catch (IOException e) {
-                logger.logError("Ошибка закрытия сокета: " + e.getMessage(), Log.SERVER);
+                logger.logError("Ошибка при закрытии ресурсов: " + e.getMessage(), Log.SERVER);
             }
         }
 
@@ -224,15 +239,27 @@ public class ChatServer {
     // Отключение клиента
     public static void disconnectClient(ClientHandler clientHandler) {
         try {
-            if (clientHandler != null && clientHandler.clientName != null && !clientHandler.clientName.equals("Гость")) {
-                clientWriters.remove(clientHandler.clientName);
+            if (clientHandler != null) {
+                if (clientHandler.clientName != null && !clientHandler.clientName.equals("Гость")) {
+                    PrintWriter writer = clientWriters.remove(clientHandler.clientName);
+                    if (writer != null) {
+                        writer.close();  // Закрываем PrintWriter, если он существует
+                    }
+                }
+                if (clientHandler.socket != null && !clientHandler.socket.isClosed()) {
+                    clientHandler.socket.close();
+                }
+                logger.log(clientHandler.clientName + " отключен!", Log.SERVER);
+            } else {
+                logger.log("Клиент отключен, но объект ClientHandler равен null.", Log.SERVER);
             }
-            if (clientHandler.socket != null && !clientHandler.socket.isClosed()) {
-                clientHandler.socket.close();
-            }
-            logger.log(clientHandler.clientName + " отключен!", Log.SERVER);
         } catch (IOException e) {
             logger.logError("Ошибка при отключении клиента: " + e.getMessage(), Log.SERVER);
         }
+    }
+    // Метод для безопасного завершения работы сервера
+    public static void stopServer() {
+        isRunning = false;
+        // Логирование или действия по остановке
     }
 }
